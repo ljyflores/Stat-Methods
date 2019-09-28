@@ -1,0 +1,241 @@
+---
+title: "Homework 8"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+date: "due November 9th 12PM"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problems
+
+1. **Comfort in car seats**. Researchers at the University of Michigan examined information on 38 drivers to study the preferred seat position of drivers based on factors like age and body weight/size. In the file `carseatpositions.csv`, the response variable `hipcenter` records the preferred seat position, measured in horizontal distance (in mm) of the midpoints of the hips from a fixed location in the car. The potential predictors include:
+
+* `Age` of the driver (in years)
+* `Weight` (in lbs)
+* `HtShoes` (height while wearing shoes in cm)
+* `Ht` (barefoot height in cm)
+* `Seated` (seated height in cm)
+* `Arm` (lower arm length in cm)
+* `Thigh` (thigh length in cm)
+* `Leg` (lower leg length in cm)
+
+```{r}
+CAR <- read.csv("carseatpositions.csv")
+```
+
+Our goal is to build a model to predict `hipcenter` using the available variables.
+
+(a) Examine one or more scatterplot matrices on your own but do not include these plots in your submission (it's too big and will appear rather messy). Based on the plot(s), which variables appear to be strongly negatively associated with `hipcenter` and which variables appear to be strongly positively associated with `hipcenter`? 
+
+```{r}
+#plot(CAR)
+```
+
+The variables for height in shoes, height, seated height, and the leg length all appear to be strongly negatively correlated with the variable hipcenter, while no positive relationships weree found between hipcenter and other variables.
+
+(b) Fit a model using all of the available variables. Display the regression summary. Based on the t-statistics for the individual coefficients, which predictors appear to be significant for predicting `hipcenter`? Does this surprise you given your findings in (a)?
+
+```{r}
+car1 <- lm(hipcenter ~ Age + Weight + HtShoes + Ht + Seated + Arm + Thigh + Leg, data = CAR)
+summary(car1)
+```
+
+According to the model, none of the predictors are statistically significant at a significance level of 0.05 with the exception of the intercept. This is surprising because I thought that strong associations between variables would lead to them becoming significant predictors. This leads me to suspect that other variables were strongly correlated.
+
+(c) What do you learn from the F-statistic and its associated p-value? Determine why you observe seemingly conflicting conlusions from the F-statistic and the t-statistics in (b). It may be helpful to include a discussion of R^2 or one or more plots in your discussion.
+
+* F-statistic: 7.94 \n
+* F-crit (significance level of 0.05): 2.2783 \n
+* p-value: 1.306e-5
+
+Since the F-statistic is larger than the F-crit, and the p-value is 1.306e-5, there is sufficient evidence to reject the null hypothesis at a significance level of 0.05 and conclude that the predictors of this model are not zero. Therefore, we could suspect multicollinearity. Looking at the previous plots, there appear to be some variables that are highly correlated, namely "Height with Shoes", "Height", "Leg", and "Seated Height". The R^2s of models plotting the variables pairwise were then examined below.
+
+```{r}
+summary(lm(HtShoes ~ Ht, data = CAR))$adj.r.squared
+summary(lm(HtShoes ~ Seated, data = CAR))$adj.r.squared
+summary(lm(Ht ~ Seated, data = CAR))$adj.r.squared
+summary(lm(Ht ~ Leg, data = CAR))$adj.r.squared
+summary(lm(HtShoes ~ Leg, data = CAR))$adj.r.squared
+summary(lm(Seated ~ Leg, data = CAR))$adj.r.squared
+
+plot(CAR[,c(3,4,5,8)], main = "Scatterplot of Variables with Multicollinearity")
+```
+
+The R^2s between Height with Shoes, Height, Seated, and Leg all fall above 80% with the exception of Seated Height and Leg length. In fact, Height with Shoes and Height have an R^2 of 0.9962. This can also be seen in the scatterplots, which show strong positive correlation among the variables. This shows that these variables are highly correlated with one another, which makes sense since they all have to do with height, thus taller people will generally be taller than shorter ones, whether they are in shoes, barefoot, or are seated. Longer legs also make a person taller in general. Therefore, we can see that there is multicollinearity going on which is what causes these variables' predictors to be statistically insignificant, despite them having strong association from the initial plots.
+
+(d) Now fit a smaller regression model that predicts `hipcenter` using `Age` and `Weight`. Display the regression summary. In 3-4 sentences, state in words what you learn from the regression summary (i.e. comment on the significance of individual predictors, interpret the coefficients, interpret the R^2).
+
+```{r}
+car2 <- lm(hipcenter ~ Age + Weight, data = CAR)
+summary(car2)
+```
+
+The model predicts that for a person weighing nothing and with age 0, the hip center will be 28.72 mm away from the fixed location in the opposite direction of measurement. It then predicts that for a 1 year increase in age, the hip center moves 1.00 mm in the direction of measurement from the specified point, whereas for a 1 lb increase in weight, the hip center moves 1.10 mm in the opposite direction of measurement. The regression line is then predicted as such:
+
+$$ HipCenter = -28.72 + 1.00Age -1.10Weight $$
+
+At a significance level of 0.05, there is sufficient evidence to reject the null hypothesis and conclude that both coefficients for age and weight are statistically significant. Given a p-value of 1.208e-05, there is also sufficient evidence to reject the null hypothesis at a significance level of 0.05 and conclude that the coefficients of the model are not zero. Finally, the R^2 tells us that the model is able to account for 47.64% of variability in the data.
+
+(e) Use 5-fold cross-validation to compare the smaller model in (d) to the full model that includes all predictors. Be sure to set the seed. Which model appears to do a better job of predicting the preferred seat position? Justify your answer using a comparison of cross-validation mean squared error. Does predictive accuracy depend on statistical significance of individual predictors in the model? Why or why not?
+
+```{r}
+set.seed(230)
+folds <- rep(1:5, times = 38/5)
+folds[36:38] <- c(1,2,3)
+folds <- sample(folds) 
+car1model <- rep(NA, 38)
+car2model <- rep(NA, 38)
+```
+
+```{r}
+for (k in 1:5){
+  train <- which(folds != k)
+  test <- which(folds == k)
+  car1 <- lm(hipcenter ~ Age + Weight + HtShoes + Ht + Seated + Arm + Thigh + Leg, data = CAR[train,])
+  car2 <- lm(hipcenter ~ Age + Weight, data = CAR[train,])
+  car1model[test] <- predict(car1, CAR[test,])
+  car2model[test] <- predict(car2, CAR[test,])
+}
+```
+
+```{r}
+mean((car1model-CAR$hipcenter)^2)
+mean((car2model-CAR$hipcenter)^2)
+```
+
+Since the mean squared error of the first model was smaller than that of the second, we can then say that the first model (full model) was better at predicting the hip center than the second model. This shows that although not all the predictors of the first model were statistically significant, this did not really matter in terms of predictive accuracy. As we saw earlier, predictors may simply not have been statistically significant due to multicollinearity, but this does not mean they discount the model from being accurate in prediction. 
+
+(f) Now consider another candidate model for comparison against the full model, this time
+including a quadratic term for `Age` and a quadratic term for `Weight`. Again using 5-fold cross-validation, how does this candidate model compare to the full model in prediction? Justify your answer. 
+
+```{r}
+set.seed(230)
+folds <- rep(1:5, times = 38/5)
+folds[36:38] <- c(1,2,3)
+folds <- sample(folds) 
+car3model <- rep(NA, 38)
+car4model <- rep(NA, 38)
+```
+
+```{r}
+for (k in 1:5){
+  train <- which(folds != k)
+  test <- which(folds == k)
+  car3 <- lm(hipcenter ~ Age + Weight + HtShoes + Ht + Seated + Arm + Thigh + Leg, data = CAR[train,])
+  car4 <- lm(hipcenter ~ Age + Weight + HtShoes + Ht + Seated + Arm + Thigh + Leg + I(Age^2) + I(Weight^2), data = CAR[train,])
+  car3model[test] <- predict(car3, CAR[test,])
+  car4model[test] <- predict(car4, CAR[test,])
+}
+
+mean((car3model-CAR$hipcenter)^2)
+mean((car4model-CAR$hipcenter)^2)
+```
+
+The first model still had a smaller mean standard error than the second model, showing that the full model was still better at predicting the hip center than the smaller model employing quadratic terms for age and weight. In fact, (having set the same seed for both) the model employing quadratic terms performed worse than that without the quadratic terms.
+
+2. **Thanksgiving Travel Planning** In this problem, we'll have some more fun with
+the flights dataset that we used in class. Recall you can load the dataset by loading in the `nycflights13` package. You will use `dplyr` and `ggplot2` in this problem for data 
+processing and data visualization. For your information, Thanksgiving was on November 28
+in 2013. All plots should be done using ggplot. Since we have not yet discussed how to
+add titles and labels in ggplot, do not worry about them for this assignment.
+
+```{r}
+library(dplyr)
+library(nycflights13)
+library(ggplot2)
+```
+
+(a) Suppose you are thinking of making last minute travel plans out of New York to some
+frequently flown destination out of a New York City airport. You are comfortable with flying out on either Nov. 27, 28, or 29th from any one of the 3 New York-area airports. 
+Using `dplyr`, display a data frame (or a tibble, as its called in `dplyr`) 
+that shows the top 3 destinations (most number of
+flights on those days out of any of the three airports), ordered in descending flight count, along with the number of flights that go to each of the 3 destinations. 
+
+```{r}
+thanksgiving <- filter(flights, month == 11, day == 27 | day == 28 | day == 29)
+```
+
+```{r}
+count(thanksgiving, dest, sort = TRUE) %>% head(3)
+```
+
+(b) Suppose you decide to go to the destination with the most flights. You want to choose wisely so that you minimize your expected arrival delay. Start by 
+calculating an average arrival delay grouped by hour (including any pre-processing of
+the `arr_delay` column you deem to be appropriate). Make a line plot (via `geom_line()` that shows the average arrival delay on the y-axis against hour on the x-axis).
+
+To simplify the model, I turned all the negative arr_delays (i.e. arrived earlier than scheduled) to zero. Thus, arriving earlier or on time meant that the delay was zero.
+
+```{r}
+thanksgiving <- thanksgiving %>% mutate(arr_delay = pmax(arr_delay, 0)) 
+
+ATL <- thanksgiving %>% filter(dest == "ATL") %>% group_by(hour) %>% summarize(mean_delay = mean(arr_delay))
+ATL
+ggplot(ATL, aes(x=hour, y=mean_delay)) + geom_line()
+```
+
+Both the table and graph show that flights leaving at 12NN and 8PM had no average arrival delays.
+
+(c) Realizing that it is also important to consider which day to fly out, which airport to fly out from, and which carrier to fly with, now consider additionally incorporating the necessary additional grouping variables. Compute the average
+arrival delay for each possible grouping. Visualize the resulting tibble/data frame using 1-3 plots. If cost of the plane ticket and availability of seats are not issues to worry about, which day would you choose to fly out, from which airport, at what time(s), and with which carriers? Justify your answers.
+
+Note: I apologize, the par(mfrow) command wouldn't work, the 2nd and 3rd graphs were supposed to be combined into one, as were the 4th and 5th graphs.
+
+```{r}
+ATLfull <- thanksgiving %>% filter(dest == "ATL") 
+ATLfull %>%  group_by(day) %>% summarize(mean_delay = mean(arr_delay))
+ATLfull %>%  group_by(origin) %>% summarize(mean_delay = mean(arr_delay))
+ATLfull %>%  group_by(carrier) %>% summarize(mean_delay = mean(arr_delay))
+```
+
+The data was filtered into a data set called ATLfull, then summarized by day, origin, and carrier. It showed that among the three days, flights on November 29 experienced the least arrival delay. Among the airports, flights from JFK experienced the least arrival delay. Finally, MQ flights experienced the least arrival delay. I then searched these flights.
+
+```{r}
+ATLfull %>% filter(day == 29, origin == "JFK", carrier == "MQ")
+```
+
+This empty data set shows that while these criterion yielded the least arrival delays per category, these flights don't actually exist. MQ flights may have the shortest average delay amongst the carriers, but do not fly out from JFK on the 29th. Thus, an origDay variable was created to group the flights by day and airport. The reasoning behind this is that no matter the carrier, flights on the same day from the same origin will likely experience similar conditions, so it made sense to group them by day and origin first, then pick out which carriers performed the best on those days. 
+
+```{r}
+ATLfull <- ATLfull %>% mutate(origDay = paste0(day, ", ", origin))
+ggplot(ATLfull) + geom_boxplot(aes(x = origDay, y = arr_delay)) 
+```
+
+It appears that flights on the 27th from JFK and on the 28th and 29th from all airports have median arrival delays of zero. To choose amongst them, the means were analyzed.
+
+```{r}
+ATLfull %>%  group_by(origDay) %>% summarize(mean_delay = mean(arr_delay))
+```
+
+Amongst the days, only flights from JFK on the 28th and EWR on the 29th had arrival delays of zero. Given both mean and medians of zero, and that the boxplots had no whiskers nor outliers, this means that all flights from 28, JFK and 29, EWR had no arrival delay. I then checked to see the departure times by carrier.
+
+```{r}
+ggplot(ATLfull %>% filter(origDay == "28, JFK") %>% select(hour, carrier)) + geom_bar(aes(x = hour, fill = carrier), width = 1) + scale_y_continuous(breaks=seq(0, 3, 1)) + scale_x_continuous(breaks=seq(0, 24, 1))
+
+ggplot(ATLfull %>% filter(origDay == "29, EWR") %>% select(hour, carrier)) + geom_bar(aes(x = hour, fill = carrier), width = 1) + scale_y_continuous(breaks=seq(0, 3, 1)) + scale_x_continuous(breaks=seq(0, 24, 1))
+```
+
+This shows that I could fly out from JFK on Nov 28 with DL, or from EWR on Nov 29 on either DL or EV. In the initial plot, we looked for the arrival delays by hour over 3 days for 3 airports. To choose between these two, I checked the arrival delays by hour for Nov 28 in JFK and for Nov 29 in EWR. I checked because although we saw that flights to ATL did not experience arrival delays, conditions in those airports on those days could have affected other flights which could occur again and affect ATL flights.
+
+```{r}
+ATL28 <- thanksgiving %>% filter(day == 28, origin == "JFK") %>% group_by(hour) %>% summarize(mean_delay = mean(arr_delay))
+
+ggplot(ATLfull %>% filter(origDay == "28, JFK") %>% select(hour, carrier)) + geom_bar(aes(x = hour, fill = carrier), width = 1) + scale_y_continuous(breaks=seq(0, 40, 5)) + scale_x_continuous(breaks=seq(0, 24, 1)) + geom_line(data = ATL28, aes(x=hour, y=mean_delay))
+
+ATL29 <- thanksgiving %>% filter(day == 29, origin == "EWR") %>% group_by(hour) %>% summarize(mean_delay = mean(arr_delay))
+
+ggplot(ATLfull %>% filter(origDay == "29, EWR") %>% select(hour, carrier)) + geom_bar(aes(x = hour, fill = carrier), width = 1) + scale_y_continuous(breaks=seq(0, 15, 5)) + scale_x_continuous(breaks=seq(0, 24, 1)) + geom_line(data = ATL29, aes(x=hour, y=mean_delay))
+```
+
+From these plots, I would choose to fly on Nov 29 from EWR at 9AM on DL, since the arrival delay for flights from EWR on Nov 29 was zero. The arrival delay at 6AM was also zero, but I wouldn't really want to wake up that early on a holiday.
+
+(d) For your chosen fly-out day and airport of origin, how many available flights are 
+there per hour? Answer this question using a suitable plot.
+
+```{r}
+ggplot(ATLfull %>% filter(origDay == "29, EWR") %>% select(hour, carrier)) + geom_bar(aes(x = hour), width = 1) + scale_y_continuous(breaks=seq(0, 3, 1)) + scale_x_continuous(breaks=seq(0, 24, 1))
+```

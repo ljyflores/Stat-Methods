@@ -1,0 +1,110 @@
+---
+title: ''
+author: ""
+date: "April 22, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##  S&DS 363, HW6: Ordination
+#### Lorenzo Flores (Individual Submission)
+
+First, some useful packages for performing Ordination.
+
+```{r, warning=FALSE}
+library(vegan)
+library(vegan3d)
+library(mgcv)
+library(MASS)
+library(rgl)
+```
+
+#### Reading in Data
+```{r}
+cereal <- read.csv("http://reuningscherer.net/stat660/data/cereal.attitudes.csv")
+```
+
+1) Fit Correspondence Analysis to your data.
+
+#### Correspondence Analysis
+```{r}
+#Perform correspondence analysis
+cerealcca <- cca(cereal[,2:12])
+```
+
+2) Discuss the inertia, make a two dimensional plot of the first two CA directions.
+
+```{r}
+summary(cerealcca)
+
+#plot results
+plot(cerealcca, type="n" ,xlim=c(-2,2.5), main = "CA for Cereal Data")
+text(cerealcca, dis="wa",labels=cereal[,1])
+points(cerealcca, pch=21, col="red", bg="yellow", cex=1.2)
+text(cerealcca, "species", col="blue", cex=0.8)
+```
+
+Basing off the propertion explained, which in turn was derived from the eigenvalues (the square root of the inertia), the first component accounted for 63.7%, while the second component accounted for 27.5%, giving a total of 91.2% explained in this plot alone. Furthermore, 99% of the variance was explained within 4 components.
+
+#### Detrended Correspondence Analysis
+
+```{r}
+#detrended correspondence analysis
+cerealdca<-decorana(cereal[,2:12])
+plot(cerealdca,type="n", main = "Detrended CA for Cereal Data")
+text(cerealdca, display=c("sites"),labels=cereal[,1],cex=0.86)
+points(cerealdca, pch=21, col="red", bg="yellow", cex=0.6)
+text(cerealdca, "species", col="blue", cex=0.6)
+```
+
+3) Comment on whether or not there is any evidence of 'data snaking' in higher
+dimensional space.
+
+Data snaking is evident in a plot when data seem to circle around areas. It appeared that in the first CA plot, the different cereal brands did circle around the plot, although I cannot think of a clear reason or point to a specific variable that would account for this. This will explored in later questions.
+
+4) In a few sentences, describe what you conclude from your plot.
+
+CA1 appears to be mainly controlled by variables like price and 'natural' flavors (upwards), in contrast to taste and crispiness (downwards). CA2 on the other hand contrasts popularity, if they would come back to it, and price (leftwards), with value and how fit eating the cereal keeps you (rightwards).
+
+The plot describes 91.2% of the variance, as was noted from the inertia and eigenvalues.
+
+We see from the plot that Rice Krispies, Frosties, and Sugar Puffs possess the same attributes (popular, great taste, crispy); Corn Flakes and Weet Abix appear close to one another, exhibiting good price and if customers would come back to them; Shredded Wheat, Special K, and All Bran exhibited increasing levels of perceived value and helping consumers stay fit.
+
+5) Perform Multidimensional Scaling (metric or non-metric) for 1, 2, and 3 dimensions.
+
+```{r}
+rownames(cereal) <- cereal[,1]
+cereal <- cereal[,-1]
+```
+
+```{r, results='hide',warning=FALSE}
+cereal.mds1 <- metaMDS(cereal, distance="euclidean", k=1)
+cereal.mds2 <- metaMDS(cereal, distance="euclidean", k=2)
+cereal.mds3 <- metaMDS(cereal, distance="euclidean", k=3)
+```
+
+6) Discuss the stress (or SStress) of each dimensional solution. Make a scree plot if you're able.
+
+```{r}
+stress <- c(cereal.mds1$stress, cereal.mds2$stress, cereal.mds3$stress)
+plot(c(1:3),stress,col="blue",lwd=3, type="b", xlab="Dimensions")
+```
+
+Stress was slightly above 0.05 at one dimension, then dropped to nearly zero for second and third dimensions. Based on the scree plot, it recommends us to use two dimensions.
+
+7) Make a two dimensional plot of your results.
+```{r}
+plot(cereal.mds2, type="n", main = "MDS Plot of Cereal Data")
+points(cereal.mds2, pch=19, col="black", cex=1)
+text(cereal.mds2, "sites", labels=rownames(cereal),cex=0.86)
+text(cereal.mds2, "species", col="blue", cex=1.1)
+```
+
+The plot shows that All Bran is associated with helping consumers remain fit; Shreaded Wheat and Special K are associated with value, being nourishing, and having a natural taste; Rice Krispies, Sugar Puffs, and Frosties are similar to one another and associated with crispiness and taste, and Weet Abix and Corn Flakes are cereals people would come back to, and have good price. It is interesting to note that the variable fun is not strongly associated with any of the cereals. The multidimensional plot yields similar results to the original CA, with the same groups of cereals being clustered together and associated with the same traits.
+
+

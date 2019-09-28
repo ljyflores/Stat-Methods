@@ -1,0 +1,155 @@
+---
+title: "Discriminant Analysis Homework -- Alzheim Data"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+
+Discriminant Analysis Homework -- Alzheim Data
+Nathan Kim, LJ Flores, Megan  Zhang, Jinny Choi
+
+```{r, warning=FALSE, message=FALSE}
+library(MASS)
+library(DiscriMiner)
+library(klaR)
+```
+
+
+```{r, warning=FALSE}
+alzheim <- read.csv("alzheim.csv", as.is = TRUE)
+alzheim <- alzheim[,c(1,3,4,6,7,8,9,10)]
+for (i in 2:7){
+  alzheim[,i] <- (alzheim[,i]-mean(alzheim[,i]))/sqrt(var(alzheim[,i]))
+}
+alzheim$groupFactor <- as.factor(alzheim$group)
+```
+
+**1.	Evaluate the assumptions implicit to Discriminant Analysis for your data – multivariate normality WITHIN each group (i.e. chi-square quantile plots) and similarity of covariances matrices (look at Box’s M or just look at raw standard deviations/covariance matrices).  Comment on what you find.  Comment on whether you think transformations might help your data to meet the assumptions of DA.  If you think they might, make some transformations and find out!  You might also want to make a matrix plot (or a pairs plot) to get a sense of what your data looks like two variables at a time (use different symbols for each group).**
+
+Checking for multivariate normality using Chi-square plots shows that all three groups have a multivariate normal distribution.
+
+```{r}
+source("http://www.reuningscherer.net/STAT660/R/CSQPlot.r.txt")
+CSQPlot(alzheim[alzheim$group == 1, c("hirecall", "lirecall", "hiunrem", "liunrem", "store", "recog")], label = "Chi Square Plot for Alzheimer's Patients")
+CSQPlot(alzheim[alzheim$group == 2, c("hirecall", "lirecall", "hiunrem", "liunrem", "store", "recog")], label = "Chi Square Plot for Alzheimer's Patients")
+CSQPlot(alzheim[alzheim$group == 3, c("hirecall", "lirecall", "hiunrem", "liunrem", "store", "recog")], label = "Chi Square Plot for Alzheimer's Patients")
+```
+
+Boxplots of data divided by the different variables show that there is significant overlap within each variable for the Depressed and Control groups, whereas there is clear separation between these groups from Alzheimer's patients.
+```{r, fig.height=6, fig.width=6}
+par(mfrow=c(3,2))
+boxplot(hirecall ~ group, data = alzheim, horizontal = T, main = "Hirecall by Patient Disease")    
+boxplot(lirecall ~ group, data = alzheim, horizontal = T, main = "Lirecall by Patient Disease")
+boxplot(hiunrem ~ group, data = alzheim, horizontal = T, main = "Hiunrem by Patient Disease")
+boxplot(liunrem ~ group, data = alzheim, horizontal = T, main = "Liunrem by Patient Disease")
+boxplot(store ~ group, data = alzheim, horizontal = T, main = "Store by Patient Disease")
+boxplot(recog ~ group, data = alzheim, horizontal = T, main = "Recog by Patient Disease")
+```
+
+The matrix plot of test variables plotted pairwise and colored by group shows similar results, with depression and control groups occupying more-or-less the same score ranges while the group for Alzheimer's disease shows consistent separation from the other two groups.
+
+```{r}
+plot(alzheim[,c("hirecall", "lirecall", "hiunrem", "liunrem", "store", "recog")], col = alzheim$group, pch = 1, cex=1.2)
+```
+
+Comparing the covariance matrices of both "Alzheimer's Disease", "Depression" and "Control" categories shows large differences between these categories.
+```{r}
+round(cov(alzheim[alzheim$group == 1, 2:7]),2)
+round(cov(alzheim[alzheim$group == 2, 2:7]),2)
+round(cov(alzheim[alzheim$group == 3, 2:7]),2)
+```
+
+Checking standard deviations of diseases, categorized as "Alzheimer's Disease", "Depression" and "Control" also shows that for variables like hiunrem, liunrem, and recog, the largest standard deviation is over twice that of the smallest entry. 
+```{r}
+sumstats <- round(sqrt(aggregate(alzheim[,2:7],by=list(alzheim$group),FUN=var)),2)[,-1]
+rownames(sumstats) = c("Alzheimer's", "Depression", "Control")
+print("Standard Deviations by Group")
+sumstats
+```
+
+We conclude that although the data is multivariate normal within each group based on the chi square plots, the covariance matrices are not the same between groups, so quadratic DA will be applied.
+
+**2.	Perform stepwise discriminant analysis on your data.  Comment on which model seems the best.  Use quadratic discriminant analysis if appropriate.  If you end up with only one significant discriminating variable, you might want to just force a second variable in the model (i.e. add a technically ‘non-significant’ discriminator).**
+
+Stepwise discriminant analysis on the data using quadratic discriminant analysis advises to use only hiunrem, whereas linear discriminant analysis says to use only hirecall. We note however that the quadratic analysis had a higher correctness rate, and is appropriate for the data given the covariance matrices are not equal.
+```{r}
+alzheimStepLDA <- stepclass(group ~ hirecall + lirecall + hiunrem + liunrem + store + recog, data = alzheim, method = "lda", direction = 'both', fold = nrow(alzheim))
+
+alzheimStepQDA <- stepclass(group ~ hirecall + lirecall + hiunrem + liunrem + store + recog, data = alzheim, method = "qda", direction = 'both', fold = nrow(alzheim))
+```
+
+We add hirecall onto the model with hiunrem, and generate a partition plot as follows, with 1 for Alzheimer's, 2 for Depression, and 3 for Control.
+```{r}
+partimat(groupFactor ~ hirecall + hiunrem, data = alzheim, method = "qda")
+```
+
+**3.	Comment on whether there is statistical evidence that the multivariate group means are different (i.e. Wilks Lambda test).**
+
+Here we perform Wilk's Lambda Test
+```{r}
+alzheimManova <- manova(as.matrix(alzheim[,2:7]) ~ alzheim$group)
+summary.manova(alzheimManova, test = "Wilks")
+summary.aov(alzheimManova)
+```
+
+The Wilk's Lambda test shows that across all six variables, there is sufficient evidence to reject the null hypothesis at a significance level of 0.01, and conclude that the multivariate group means are different amongst Alzheimer's, Depression, and Control cases.
+
+**4.	How many discriminant functions are significant?  What is the relative discriminating power of each function? **
+
+Upon running Linear Discriminant Analysis, we see that LDA1 is more significant than LDA2; while this is not a significance test, we observe that 95.7% of the variability was explained by LD1 while 4.7% of the variability was explained by LD2.
+```{r}
+alzheimLDA <- lda(alzheim$group ~ alzheim$hirecall + alzheim$lirecall + alzheim$hiunrem + alzheim$liunrem + alzheim$store + alzheim$recog, prior = c(.33, .33, .34))
+alzheimLDA
+```
+
+
+**5.	Use classification, both regular and leave-one-out (or cross-validation) to evaluate the discriminating ability of your functions.**
+
+Performing Quadratic Discriminant Analysis yields 93% accuracy using regular and 71% using cross-validation.
+```{r}
+alzheimQDA1 <- qda(alzheim$group ~ alzheim$hirecall + alzheim$lirecall + alzheim$hiunrem + alzheim$liunrem + alzheim$store + alzheim$recog, prior = c(.33, .33, .34))
+alzheimRaw <- table(alzheim$group, predict(alzheimQDA1)$class)
+round(sum(diag(prop.table(alzheimRaw))),2)
+
+alzheimQDA2 <- qda(alzheim$group ~ alzheim$hirecall + alzheim$lirecall + alzheim$hiunrem + alzheim$liunrem + alzheim$store + alzheim$recog, prior = c(.33, .33, .34), CV = TRUE)
+alzheimCV <- table(alzheim$group, alzheimQDA2$class)
+round(sum(diag(prop.table(alzheimCV))),2)
+```
+
+**6.	Provide some evidence as to which of your original variables are the ‘best’ discriminators amongst your groups (look at standardized discriminant coefficients).**
+
+The data was standardized at the beginning of the data analysis, thus these coefficients serve as standardized discriminant coefficients. We see here that hiunrem, hirecall, and recog (in this order, with the first two being variables recommended by previous tests) are the 'best' discriminators.
+```{r}
+alzheimLDA$scaling
+```
+
+**7.	Make score plots for the first two or three DA function scores (be sure to use different symbols/colors for each group).  Comment on what you see.**
+
+Upon performing discriminant analysis, we see better separation between the three groups, especially between the Depression and Control groups, which had high areas of overlap prior to discriminant analysis.
+```{r}
+scores1 <- as.matrix(alzheim[,c(2:7)])%*%matrix(c(alzheimLDA$scaling), ncol=2)
+boxplot(scores1 ~ alzheim$group, lwd=2, col=c("red","blue","green"), horizontal=T, main="Alzheim Discriminant Scores \n (Red - Alzheimer's, Blue - Depression, \n Green - Control")
+```
+
+
+**8.	Bonus (and optional)– try kernel smoothing or k-nearest neighbors and get the admiration of your professor and TA (and some extra credit)!  You’ll have to use SAS or R for this.** 
+
+Below is the k-smoothing graph with bandwidths indicated on the top left.
+
+```{r}
+with(alzheim,{
+  plot(hirecall, hiunrem)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 1), col = 1)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 2), col = 2)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 3), col = 3)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 4), col = 4)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 5), col = 5)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 6), col = 6)
+  lines(ksmooth(alzheim$hirecall, alzheim$hiunrem, "normal", bandwidth = 7), col = 7)
+  legend("topleft", legend=c("Bandwidth 1", "Bandwidth 2", "Bandwidth 3", "Bandwidth 4", "Bandwidth 5", "Bandwidth 6", "Bandwidth 7"), col=c(1:7), lty=1, cex=0.8)
+})
+
+```
+

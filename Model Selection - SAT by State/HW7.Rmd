@@ -1,0 +1,202 @@
+---
+title: "Homework 7"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+date: "due November 2nd 12PM"
+---
+
+```{r setup, echo = TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problems
+
+1. **A simulation study of multicollinearity.** (Multi)collinearity occurs when one of your predictors is strongly correlated with a linear combination of a subset of other predictors in a regression model. In this problem, we will use simulated data to get an in-depth look at how collinearity of varying degrees impacts linear regression. We will start by simulating the dataset:
+
+```{r}
+# do not delete
+set.seed(1)
+x1 <- runif(50, min = 0, max =1)
+x2 <- runif(50, min = 0, max =1)
+x3 <- 5+3*x1-x2
+y <- 3+2*x1-2*x2
+
+simdata <- data.frame(y, x1, x2, x3)
+rm(x1, x2, x3, y)
+rm
+```
+
+Here, `x1` and `x2`  each constitute 50 independent simulations from a Uniform distribution on the continuous interval from 0 to 1. 
+
+(a) Write mathematical equations that relate:
+
+* `y` in terms of `x1` and `x2` (this one might sound trivial -- simply reformat the code from the chunk above)
+
+$y = 3 + 2x_1 - 2x_2$
+
+* `y` in terms of `x1` and `x3`
+
+$y = -4x_1 + 2x_3 - 7$
+
+* `y` in terms of `x2` and `x3`
+
+$y = -\frac{4}{3}x_2 + \frac{2}{3}x_3 - \frac{1}{3}$
+
+(This part of the problem is purely algebra -- no need to fit regressions, draw plots, or do any statistics!)
+
+(b) Fit 3 regression models to confirm the relationships you identified in (a). Show the regression summaries. Why do all three have R-squareds of 1?
+
+```{r}
+m1 <- lm(y ~ x1 + x2, data = simdata)
+summary(m1)
+m2 <- lm(y ~ x1 + x3, data = simdata)
+summary(m2)
+m3 <- lm(y ~ x2 + x3, data = simdata)
+summary(m3)
+```
+
+They all have R-squareds of 1 because y can be expressed as the sum of a linear combination of $x_1$ and $x_2$, $x_1$ and $x_3$, and $x_2$ and $x_3$, thus they perfectly predict y and thus all the variation in y can be accounted for by these variables.
+
+(c) Now fit a regression model that predicts `y` using all three predictors `x1`, `x2`, and `x3`. Display the regression summary. Report the value of R-squared and report the fitted regression equation. Why do you think R is unable to provide sample coefficients for all three predictors?
+
+```{r}
+m4 <- lm(y ~ x1 + x2 + x3, data = simdata)
+summary(m4)
+```
+R^2: 1
+
+Fitted Equation: $y = 3 + 2x_1 - 2x_2$
+
+Since two of the variables (x1 and x2) already perfectly predict y (R^2 of 1), R is no longer able to find more variation which it can attribute or check to see if x3 accounts for.
+
+(d) The code chunk below adds a tiny amount of noise to all of the variables in a modified data frame called `simdata2`. 
+
+```{r}
+set.seed(230)
+simdata2 <- simdata + rnorm(nrow(simdata)*ncol(simdata), sd = 0.1)
+```
+
+Does it appear that the addition of noise has substantially altered the underlying relationships between the variables? Explain, perhaps using visualizations of the data before and after adding noise. 
+
+```{r, fig.height = 10, fig.width = 10}
+par(mfrow=c(3,2))
+par(mar=c(4,5,2,6))
+plot(y ~ x1, data = simdata, xlab = "x1 Values", ylab = "y Values", main = "y Against x1")
+plot(y ~ x1, data = simdata2, xlab = "x1 Values", ylab = "y Values", main = "y Against x1")
+
+plot(y ~ x2, data = simdata, xlab = "x2 Values", ylab = "y Values", main = "y Against x2")
+plot(y ~ x2, data = simdata2, xlab = "x2 Values", ylab = "y Values", main = "y Against x2")
+
+plot(y ~ x3, data = simdata, xlab = "x3 Values", ylab = "y Values", main = "y Against x3")
+plot(y ~ x3, data = simdata2, xlab = "x3 Values", ylab = "y Values", main = "y Against x3")
+```
+Although points are not grouped as tightly along the trendlines of simdata2 compared to simdata, there seems to be no apparent change in the general trends between x1, x2, x3, and y from the data. x1 and x3 are still positively correlated with y, while x2 is still negatively correlated with y.
+
+Now refit the model in (c) using the revised data. Are all coefficients estimable now? Note that because we simulated the data here, we know the "truth" about how `y` relates to the denoised versions of `x1`, `x2`, and `x3` from (a). 
+
+```{r}
+m5 <- lm(y ~ x1 + x2 + x3, data = simdata2)
+summary(m5)
+```
+
+The coefficients are currently estimable, with x1, x2, and x3 having coefficients of 0.239, -1.128, and 0.587 respectively. 
+
+Given that, wouldn't you expect all three predictors to be statistically significant? Why isn't that the case? (Hint: VIFs may be relevant here.)
+
+```{r}
+library(VIF)
+library(car)
+vif(m5)
+```
+
+At a significance of 0.05, there is sufficient evidence to reject the null hypothesis and conclude that the coefficients of x2 and x3 are not zero, however there is insufficient evidence to conclude the same thing for the coefficient of x1. By checking the VIFs, we see that x1 and x3 are multicollinear (given VIF values of 8.19 and 8.53, relatively large as they are greater than 4), and as a result the coefficient for x1 is not significant since R already uses x3 to account for the variability in y.
+
+2. **Outliers.** In each of the plots in Figure 1, describe whether the highlighted
+point in red has high leverage, high influence, or neither in a linear regression
+model that predicts Y using X. Justify your answers. (Knit to see the plots.)
+
+![Outlier Plots for Problem 2](outliers.png)
+
+Plot (a)'s point is relatively extreme along the x-axis to the right, it is far above the points along the y-axis, and it deviates from the negative trend from left to right, making it pull the slope upwards. Thus, it has high leverage and high influence.
+
+Plot (b)'s point is relatively extreme along the x-axis to the right, it is far below the points along the y-axis, and though it follows the negative trend, it would still pull the slope even steeper downwards. Thus, it has high leverage and high influence.
+
+Plot (c)'s point lies in the middle of the points along the x-axis, and though it is far above the points along the y-axis, this will only pull the regression line up without changing the slope. Thus, it has low leverage and low influence.
+
+3. **Teacher Salaries Revisited.** In this problem, we will revisit the
+dataset (`SAT_by_state.csv`) consisting of average SAT scores by state, obtained from the 
+[National Center for Education Statistics](https://nces.ed.gov/programs/digest/current_tables.asp)' 
+most recent Digest of Education Statistics. Homework 5 has a detailed description of the data variables. We will also consider a new data frame contained in `edu_state.csv` consisting of the following variables:
+
+* `red_lunch`: % of students eligible for reduced lunch in 2015-2016.
+* `NAEP_math`: average National Assessment of Educational Progress (NAEP) math scale score of 8th-grade public school students (2017)
+* `NAEP_reading`: average National Assessment of Educational Progress (NAEP) reading scale score of 8th-grade public school students (2017)
+
+(a) Load in the data frame in `SAT_by_state.csv`. Merge in the 3 new variables in `edu_state.csv` into this data frame. Recreate a variable `SAT` in the same data frame that is the sum of the 2 average SAT score variables. 
+
+```{r}
+SAT <- read.csv("SAT_by_state.csv", as.is = TRUE)
+eduSTATE <- read.csv("edu_state.csv", as.is = TRUE)
+eduSTATE$State <- gsub("\\.", "", eduSTATE$State)
+eduSTATE$State <- gsub(" $", "", eduSTATE$State)
+SAT$SAT <- SAT$SAT_R + SAT$SAT_M
+SAT <- merge(SAT, eduSTATE, by.x = "state", by.y = "State")
+```
+
+(b) Fit a full model predicting `SAT` using all useable predictors in the dataset. (It is worth spending some time to consider which variables are useful/informative for building a model that predicts aggregate 
+SAT scores before doing this.) Identify potential outliers that have high influence on the model. Just for this part (b) of the problem, add an indicator for each potential outlier into the model. Describe what you learn from their associated coefficient(s) with respect to whether the linear model underpredicts/overpredicts the average SAT score for the observation.
+
+Since we are predicting aggregated SAT scores, I decided to use aggregate NAEP scores as a predictor.
+```{r}
+SAT$NAEP <- SAT$NAEP_math + SAT$NAEP_reading
+```
+
+```{r, fig.height = 4, fig.width = 5}
+par(mfrow=c(1,1))
+sat1 <- lm(SAT ~ perc_SAT + ratio + expenditure + teacher_salary + red_lunch + NAEP, data = SAT)
+summary(sat1)
+plot(sat1, which=5)
+```
+
+The data point 9 (District of Columbia) has a high leverage above 0.5 - far from the rest of the points, and a high Cook's Distance of 0.5 - making it a high influence point, and therefore a potential outlier.
+```{r}
+SAT$nine <- FALSE
+SAT$nine[9] <- TRUE
+sat2 <- lm(SAT ~ perc_SAT + ratio + expenditure + teacher_salary + red_lunch + NAEP + nine, data = SAT)
+summary(sat2)
+```
+
+Given a positive coefficient of 87.02, the coefficient indicates that the model predicts a higher SAT score for the outlier. Thus a model considering the outlier would predict a higher average SAT score than it should be. Given its p-value of 0.129 however, there is insufficient evidence to reject the null hypothesis at a significance level of 0.05, thus the coefficient may not necessarily be statistically significant.
+
+(c) Use backward stepwise regression to predict `SAT` (on the full data). Compare the value of R-squared of the full model versus the final stepwise regression model. Which model do you prefer for explaining average SAT scores by state?
+```{r}
+sat3 <- step(sat1, direction="backward")
+summary(sat3)
+anova(sat3, sat1)
+```
+
+The R^2 decreased from the previous model by 0.0077%. Upon examining the nested anova, the p-value was 0.5095, thus there is insufficient evidence to reject the null hypothesis at a significance level of 0.05. This shows that the difference between the fit of the models is insignificant. Given that both models are an equally good fit for the data, I would prefer the second model, as it uses less predictors, thereby simplifying the model and removing unnecessary predictors.
+
+(d) Now run all subsets regression on the dataset to identify the model that best optimizes AIC across all possible combinations of predictors. Show the resulting plot of the models and show the model summary for the optimal model.
+```{r, fig.height = 4, fig.width = 5}
+library(leaps)
+sat4 <- regsubsets(SAT ~ perc_SAT + ratio + expenditure + teacher_salary + red_lunch + NAEP, data = SAT)
+plot(sat4, scale = "Cp", main = "Cp Values for Models for Average \n SAT Score by State")
+```
+
+According to the plot, the model with the best Cp value (equivalent to AIC value) contains Percent SAT (% students taking SAT), Ratio (student-teacher ratio per state), and NAEP (aggregate of NAEP math and NAEP reading) as predictors. This is the same model that resulted from the backward stepwise regression, as can be seen in the summary below.
+
+```{r}
+sat5 <- lm(SAT ~ perc_SAT + ratio + NAEP, data = SAT)
+summary(sat5)
+```
+
+(e) You can also use `regsubsets()` to discover the model that has the best adjusted R-squared using `scale="adjr2"` in the `plot()` command run on `regsubsets()` output. Display this plot and show the model summary that achieves the best adjusted R-squared. Do you prefer this model to the one obtained in (d)? Why or why not?
+```{r, fig.height = 4, fig.width = 5}
+plot(sat4, scale = "adjr2", main = "Adjusted R-Squared Values for Models \n for Average SAT Score by State")
+sat6 <- lm(SAT ~ perc_SAT + ratio + NAEP, data = SAT)
+summary(sat6)
+```
+The plot shows 4 models that have an adjusted R^2 of 0.84, but upon checking all the models, their R^2s were actually 0.83xx, with the top-most model (Percent SAT, Ratio, NAEP) having the highest adjusted R^2 amongst all the models. Amongst the models, it is also the simplest model containing the least predictors, and the only one that has two statistically significant coefficients at a significance level of 0.01. As such, I prefer this model, which has been obtained from backward stepwise regression, all subsets regression for Cp (and AIC), and highest adjusted R^2, which contains Percent SAT, Ratio, and Aggregated NAEP as predictors.

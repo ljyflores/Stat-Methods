@@ -1,0 +1,199 @@
+---
+title: "Homework 10"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+date: "due November 30th 12PM"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+```
+
+## Problems
+
+All problems in this assignment will relate to the CT police dataset we began to explore on Thursday's class. You should load in the dataset `CT_police.rds` as we did in class to start.
+
+```{r}
+CTpolice <- readRDS("CT_police.rds")
+```
+
+1. **Search Rates using Driver Age and Gender.** 
+
+(a) Fit a model that predicts whether a search was conducted using driver's gender. Show a 99% confidence interval for the odds ratio of `driver_genderM`. Is there evidence (based on this interval) to suggest that males have odds of getting searched that are at least twice that of females? Justify your answer.
+
+```{r}
+search1 <- glm(search_conducted ~ driver_gender, data = CTpolice, family = binomial)
+summary(search1)
+search2 <- confint(search1, level = 0.99)
+exp(search2)
+```
+
+Using a 99% confidence interval, we are 99% confident that the entire interval for the odds of search for driver_genderM is above 2, thus it is highly likely that the odds of males getting searched are at least twice that of females.
+
+(b) Fit a model using the driver's age, gender and an interaction term between the two to predict whether a search was conducted. Display the model summary. Identify and interpret the odds ratio for age. Comment on whether you think the odds ratio is statistically and/or practically significant.
+
+```{r}
+search3 <- glm(search_conducted ~ driver_age * driver_gender, data = CTpolice, family = binomial)
+summary(search3)
+
+exp(-0.052643)
+```
+
+The odds ratio is 0.948. This means that for a 1 year increase in age holding all else constant, a person is 5.2% less likely to be searched. Given a p-value of 2e-16, there is sufficient evidence to reject the null hypothesis at a significance level of 0.05 and conclude that this coefficient, and thus the odds ratio are statistically significant. In real life, a 5% decrease for 1 year in age is also a considerable decrease, especially when one thinks about how this affects the odds compounded over a number of years.
+
+(c) With logistic regression, there is no such thing as R-squared. Instead, we can use **classification error** for an intuitive measure of how well the model fits the data. This is computed in the following way:
+
+* Convert the fitted probabilities $\hat p$ for observations into predicted classes (1/0 or searched/not searched). For example, $\hat p >= 0.5$ could be mapped to a prediction of 1 (searched) whereas $\hat p < 0.5$ could be mapped to a prediction of 0 (not searched). In this case, we call 0.5 the **classification threshold**.
+
+* Classification error is the _fraction of predictions that are incorrect_ (i.e. fraction of predictions that do not match the actual outcomes of searched/not searched).
+
+Compute the classification error for the model fit in (b) using a classification threshold of 0.05 (not a typo... in general, we would use cross-validation to pick a threshold rather than just picking an arbitrary number).
+
+```{r}
+1 - mean((predict(search3, CTpolice, type = "response") >= 0.05)*1 == CTpolice$search_conducted, na.rm = TRUE)
+```
+
+Using a classification threshold of 0.05, the model was able to correctly predict 97.7% of cases regarding whether or not the individual was searched. Thus, the classification error is 2.30%.
+
+2. **Search Rates, stepwise regression.** Consider the following model formula for fitting a logistic regression model:
+
+```
+search_conducted ~ county_name + driver_gender * driver_age * driver_race
+```
+
+This would suggest predicting the odds of getting searched using county, driver's gender, driver's age, driver's race, and all 2-way interactions involving gender, age, race, as well as a 3-way interaction between these variables. This is too complicated a model to use for describing search rates, but use this as a starting point for conducting backward stepwise regression. 
+
+(a) Print the coefficients in the final model obtained from stepwise regression. [Make sure you understand what models are considered in each step based on the printout. In particular, note that if a k-way interaction term is included between predictors x1, x2, and x3, then all (k-1)-way interactions are also included, and if a 2-way interaction term between predictors x1 and x2 is included in a model, then the linear terms x1 and x2 (sometimes called main effects) are also included.]
+
+```{r, results = 'hide'}
+library(leaps)
+searchFull1 <- glm(search_conducted ~ county_name + driver_gender * driver_age * driver_race, data = CTpolice, family = binomial)
+searchFull2 <- step(searchFull1, direction = "backward")
+```
+```{r}
+coef(searchFull2)
+```
+
+(b) Consider a randomly selected white male driver in New Haven County and a randomly selected black male driver in New Haven County. What does the model predict for their probabilities of getting searched over their lifetime (ages 16 through 80)? Show the predicted probabilities graphically on the same plot rather than print out the individual predictions. Write a couple of sentences summarizing this plot.
+
+```{r, fig.height = 4, fig.width = 4}
+sampleBlack <- data.frame(driver_gender = "M", driver_race = "Black", county_name = "New Haven County", driver_age = c(16:80))
+sampleBlack$Prob <- predict(searchFull2, sampleBlack, type = "response")
+
+sampleWhite <- data.frame(driver_gender = "M", driver_race = "White", county_name = "New Haven County", driver_age = c(16:80))
+sampleWhite$Prob <- predict(searchFull2, sampleWhite, type = "response")
+
+plot(sampleBlack$Prob ~ sampleBlack$driver_age, pch = 16, main = "Probability of Search \n By Race by Age", xlab = "Age", ylab = "Probability", las = 1)
+points(sampleWhite$Prob ~ sampleWhite$driver_age)
+legend("topright", legend=c("Black", "White"), pch=c(16,1))
+```
+
+The plot shows that for randomly selected black or white males in New Haven County, as the age increases, their probability of being searched decreases exponentially with age, and nears nearly 0 at the age of 80. Up to this point however, black males consistently have higher probability of being searched than white males, exceeding 10% before their twenties, whereas white males only have about a 4.5% chance of search during this age range.
+
+3. **Finding Contraband.** For this problem, we will focus on looking at whether or not contraband was indeed found (`contraband_found`) against driver race. To begin with, we will need to examine only the rows where vehicles were searched (if they weren't searched, contraband could not have been found in the first place). Then we will consider evaluating the following hypotheses:
+
+$$H_0:\text{ contraband discovery is independent of driver's race}$$
+vs.
+$$H_a:\text{ contraband discovery is not independent of driver's race}$$
+
+(a) Subset the data such that we have a data frame consisting of only those drivers who were searched. Examine a 2-way table for contraband found vs. driver's race. Make a suitable plot that might be helpful for exploring the hypotheses above.
+
+```{r, fig.height = 4, fig.width = 4}
+contraband <- CTpolice %>% filter(search_conducted == TRUE)
+contraband$driver_race <- factor(contraband$driver_race, levels = c("White", "Asian", "Black", "Hispanic", "Other"))
+table(contraband$driver_race, contraband$contraband_found)
+
+library(ggplot2)
+ggplot(contraband) + geom_bar(aes(x = driver_race, fill = contraband_found), position = 'fill') + ggtitle("Proportion of Contraband Found \n by Race for Searched Drivers") + xlab("Driver Race") + ylab("Proportion")
+```
+
+(b) Recall that the chi-square test statistic is useful for testing the hypotheses given, and its formula is:
+
+$$\chi^2 = \sum_i\frac{(O_i-E_i)^2}{E_i}$$
+
+(Details on this formula are found in notes from Nov. 15.)
+
+Compute the expected value under $H_0$ in the cell of the 2-way table for `contraband_found == TRUE` and `driver_race == "Asian"`. This value is $E_i$ for the cell (`contraband_found == TRUE` and `driver_race == "Asian"`) in the two-way table. What is its corresponding contribution to the chi-squared test statistic (i.e. what is $(O_i-E_i)^2/E_i$ for this cell)?
+
+```{r}
+Erace <- mean(contraband$driver_race == "Asian")
+Efound <- mean(contraband$contraband_found == "TRUE")
+Exp <- Erace * Efound * nrow(contraband)
+(10 - Exp)^2 / Exp
+```
+
+The expected value is 8.86, while its contribution to the chi-squared test statistic is 0.147.
+
+(c) Write a function that takes in a general 2-way table and outputs the chi-squared test statistic testing independence of its row and column variables. This means you should do the same calculation in (b) across all cells in the 2-way table and sum them up. Of course, you may not use any R functions such as `chisq.test()` for doing the calculation, but you may check that when you run your function on your 2-way table, you get the same statistic shown here:
+
+```{r}
+chiStatCalc <- function(sampleTable){
+  chiStat <- 0
+
+  rows <- nrow(sampleTable)
+  meanFalse <- sum(sampleTable[,1])/sum(sampleTable)
+  meanTrue <- sum(sampleTable[,2])/sum(sampleTable)
+
+  for(i in 1:rows){
+    raceProp <- sum(sampleTable[i,])/sum(sampleTable)
+    Exp <- raceProp * meanFalse * sum(sampleTable)
+    Exp <- (sampleTable[i,1] - Exp)^2 / Exp
+    chiStat <- Exp + chiStat
+  }
+
+  for(i in 1:rows){
+    raceProp <- sum(sampleTable[i,])/sum(sampleTable)
+    Exp <- raceProp * meanTrue * sum(sampleTable)
+    Exp <- (sampleTable[i,2] - Exp)^2 / Exp
+    chiStat <- Exp + chiStat
+  }
+
+  print(chiStat)
+}
+
+#Test
+sampleTable <- table(contraband$driver_race, contraband$contraband_found)
+contrabandChiStat <- chiStatCalc(sampleTable)
+contrabandChiStat
+
+#Chi-squared Test
+chisq.test(sampleTable, correct = FALSE)
+```
+
+Both the function and the chi-squared test gave a chi-squared value of 55.37.
+
+(d) A common assumption required for the validity of p-values from chi-squared tests (wherein the p-values are derived from right-tailed probabilities under a chi-squared distribution) is that the expected counts in each cell of the table have to be 5 or larger. We may be on the borderline in this case, so we will also consider using a permutation test for the chi-squared test. Use the following approach (this should start feeling rather routine at this point...):
+
+* Structure a for-loop with 1,000 iterations.
+
+* Within each iteration, shuffle up either column (driver race or contraband found). Obtain the chi-squared test statistic for the shuffled data by applying your function in (c) to the resulting 2-way table of the shuffled data
+
+* After all iterations complete, compare your actual test statistic on the unshuffled data to the distribution of null test statistic and compute a right-tailed probability to get your p-value.
+
+* Draw conclusions using a suitable significance level. 
+
+```{r, fig.height = 4, fig.width = 4, results = 'hide'}
+set.seed(230)
+chiStats <- rep(NA, 1000)
+
+for(i in 1:1000){
+  shuffledRace <- sample(contraband$driver_race)
+  shuffledTable <- table(shuffledRace, contraband$contraband_found)
+  chiStats[i] <- chiStatCalc(shuffledTable)
+}
+```
+
+```{r}
+hist(chiStats, main = "Chi^2 Statistics from Null Distribution", xlab = "Chi Squared Stat", ylab = "Frequency", las = 1)
+mean(chiStats > contrabandChiStat, na.rm = TRUE)
+```
+
+Run this permutation test. Show a histogram of your simulated null distribution. What do you conclude?
+
+Given a tiny p-value less than 0.0001, there is sufficient evidence to reject the null hypothesis at a significance level of 0.05, and conclude that contraband discovery is not independent of driver's race.

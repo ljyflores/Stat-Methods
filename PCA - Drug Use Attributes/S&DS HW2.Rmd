@@ -1,0 +1,190 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+We load in the data and change the data type for manipulation accordingly.
+```{r, echo = FALSE}
+DRUG <- read.csv("Drugattitudes.csv")
+DRUG <- DRUG[complete.cases(DRUG), ] 
+for (i in 1:20){
+  DRUG[,i] <- as.double(DRUG[,i]) 
+}
+```
+
+We first observe the data's univariate statistics.
+
+
+```{r, fig.height = 6, fig.width = 6, echo = FALSE}
+par(mfrow=c(4,5))
+par(mar=c(1,1,1,1))
+for (i in 1:20){
+  boxplot(DRUG[,i], main = colnames(DRUG)[i])
+}
+```
+
+It was observed that the 'regret' variable was skewed right, while variables 'fun', 'drugscene', 'relationship', 'high', 'calm', and 'stored' were skewed to the left, with some outliers present. To transform the data, the square root of 'regret' was used, while the other variables mentioned above were squared. Through the transformation, outliers were addressed in all variables except that for 'stoned', although the skew was greatly reduced by the transformation. 
+```{r, echo = FALSE}
+DRUG$regret <- sqrt(DRUG$regret)
+DRUG$fun <- DRUG$fun^2
+DRUG$drugscene <- DRUG$drugscene^2
+DRUG$relationship <- DRUG$relationship^2 
+DRUG$high <- DRUG$high^2
+DRUG$calm <- DRUG$calm^2
+DRUG$stoned <- DRUG$stoned^2
+```
+
+We then check to see if some variables are linearly correlated.
+```{r, fig.height = 4, fig.width = 4, echo = FALSE}
+library(corrplot)
+drugCorr = cor(DRUG)
+corrplot(drugCorr, method="ellipse", order="hclust")
+```
+
+There are a number of pairs of variables with both positive (e.g. trip and legal, dope and notuse) and negative correlation (e.g. notuse and high, stoned and notuse) of 0.6 and above, which leads us to believe that PCA will be useful in combining certain variables. 
+
+We then load the function to graph a Chi-Square QQ Plot from the JDRS website.
+```{r, echo = FALSE}
+CSQPlot<-function(vars,label="Chi-Square Quantile Plot"){
+  #usually, vars is xxx$residuals or data from one group and label is for plot
+  x<-cov(scale(vars),use="pairwise.complete.obs")
+  squares<-sort(diag(as.matrix(scale(vars))%*%solve(x)%*%as.matrix(t(scale(vars)))))
+  quantiles<-quantile(squares)
+  hspr<-quantiles[4]-quantiles[2]
+  cumprob<-c(1:length(vars[,1]))/length(vars[,1])-1/(2*length(vars[,1]))
+  degf<-dim(x)[1]
+  quants<-qchisq(cumprob,df=degf)
+  gval<-(quants**(-1+degf/2))/(exp(quants/2)*gamma(degf/2)*(sqrt(2)**degf))
+  scale<-hspr / (qchisq(.75,degf)-qchisq(.25,degf))
+  se<-(scale/gval)*sqrt(cumprob*(1-cumprob)/length(squares))
+  lower<-quants-2*se
+  upper<-quants+2*se
+  
+  plot(quants,squares,col='red',pch=19,cex=1,xlab="Chi-Square Quantiles",
+       ylab="Squared MH Distance",main=paste("Chi-Square Quantiles for",label),ylim=range(upper,lower, squares) , xlim=range(c(0,quants)))
+  lines(c(0,100),c(0,100),col=1)
+  lines(quants,upper,col="blue",lty=2,lwd=2)
+  lines(quants,lower,col="blue",lty=2,lwd=2)
+  legend("topleft",c("Data","95% Conf Limits"),lty=c(0,2),col=c("red","blue"),lwd=c(2,2),
+         pch=c(19,NA))
+}
+```
+
+Then test to see if the data has a multivariate normal distribution.
+```{r, echo = FALSE}
+CSQPlot(DRUG[,-1],label="Drug Attitude Data")
+```
+
+
+Upon comparing this to the untransformed chi-square quantile plot (not shown but previously tested), the transformed data appears to follow the multivariate normal line better than the raw data. The left tail lies closer to the normal line, and the outliers on the right tail are brought closer to the normal line, though still not completely normal. We conclude that the data does not have a normal multivariate distribution, therefore in testing PCA, we cannot apply Parallel Testing.
+
+Here we perform PCA analysis.
+```{r, echo = FALSE}
+drugPCA <- princomp(DRUG[,-1], cor=TRUE)
+print(summary(drugPCA, digits = 3), loadings = drugPCA$loadings, cutoff = 0)
+```
+
+The first six components have an eigenvalue above 1, however it requires 8 parameters to cover 80% of the variance in data. Choosing six components will obtain 72.6% of the variance, which is a relatively small difference from 80%.
+
+The first component alone was able to account for 31.5% of the data, and at most 8 components are required to account for most of the data, showing a successful application of PCA. 
+
+```{r, echo = FALSE}
+round(drugPCA$sdev^2,2)
+screeplot(drugPCA, type="lines", col="blue", pch=16, cex=1.2, main="Scree Plot of Raw Drug Attitude Data")
+```
+
+The screeplot shows only one elbow after the first component, however following this plot will only account for 31.5% of the variance, thus we follow the results from the eigenvalue and total variance criteria.
+
+As stated above, the Parallel Method is not used because the data does not display a multivariate normal distribution.
+
+We then study the composition of the components by variable.
+```{r, echo = FALSE}
+round(drugPCA$loadings[,1:6],2)
+```
+Component 1: Social Considerations of Doing Drugs
+
+Positive: notuse, dope
+Negative: stoned, high, relationship, drugscene
+
+Variables notuse and dope both avoid drugs, saying that even if offered by close friends, doing drugs is a dumb idea. Variables stoned, high, relationship, and drugscene enjoy drugs saying that the drug scene and relationships involving drugs are more enjoyable. This component accounts for how strong ones view towards the social benefits of doing drugs
+
+Component 2: Health Risks of Doing Drugs
+positive: dangerous, psycho, stoned, high, sideeffects
+negative: not use, no aspirin
+
+While all positive, dangerous, psycho, and sideeffects avoid drugs, while psycho and stoned enjoy it. Variables notuse and noaspirin also avoid drugs. These all point towards the health implications of doing drugs.
+
+Component 3: Practical Considerations when Doing Drugs
+positive: calm
+negative: regret, trip, experience, stupid, lessalcohol, side effects
+
+The positively ranked variable calm and negatively ranked variables trip, and lessalcohol advocate for alcohol, while negatively ranked variables regret, experience, stupid, and side effects avoid it. All variables however point to drug use or avoidance for practical reasons, citing its use for calming oneself and mildness in comparison with alcohol, as well as consequences of drug use including saying things one does not intend to, experiencing harmful side effects of drugs, and lawmakers needing personal experience before creating drug-related legislation.
+
+Component 4: Enthusiasm Towards Drugs 1
+positive: dangerous, regret, high, no aspirin, drugscene, fun
+negative: less alcohol
+
+Positively ranked variables dangerous, regret, and noaspirin avoid drugs, whereas high, drugscene, fun, and negatively ranked variable lessalcohol advocates for alcohol. These all express general enthusiasm towards the idea of doing drugs.
+
+Component 5: Enthusiasm Towards Drugs 2
+positive: dangerous, regret
+negative: unnatural, caregivers, fun
+
+Positively ranked variables dangerous and regret, as well as negatively ranked variables unnatural and caregivers avoid drugs, while negatively ranked variable fun advocates for it. These also point towards general feelings of enthusiasm or fear of drugs.
+
+Component 6: Enthusiasm Towards Drugs 3
+positive: notuse, calm, experience, dope
+
+While all positive, notuse and dope avoid drugs while calm and experience advocate for it. They also offer general feelings of enthusiasm or fear of drugs.
+
+Then the components were plotted pairwise against one another
+```{r, fig.height = 8, fig.width = 8, echo = FALSE}
+par(mar=c(1,1,1,1))
+par(mfrow=c(3,5))
+for (i in 1:5){
+  for (x in (i+1):6){
+    plot(drugPCA$scores[,x] ~ drugPCA$scores[,i], xlab = i, ylab = x)
+  }
+}
+```
+
+They all show no clear correlation among the variables.
+
+Load the function for creating a 95% confidence ellipse from the JDRS website.
+```{r, echo = FALSE}
+ciscoreplot<-function(x,comps,namevec){
+  y1<-sqrt(5.99*(x$sdev[comps[1]]^2))
+  ymod<-y1-y1%%.05
+  y1vec<-c(-y1,seq(-ymod,ymod,by=0.05),y1)
+  y2vecpos<-sqrt((5.99-(y1vec^2)/x$sdev[comps[1]]^2)*x$sdev[comps[2]]^2)
+  y2vecneg<--sqrt((5.99-(y1vec^2)/x$sdev[comps[1]]^2)*x$sdev[comps[2]]^2)
+  y2vecpos[1]<-0
+  y2vecneg[1]<-0
+  y2vecpos[length(y2vecpos)]<-0
+  y2vecneg[length(y2vecneg)]<-0
+  plot(x$scores[,comps[1]],x$scores[,comps[2]],pch=19,cex=1.2,ylim=c(min(y2vecneg,x$scores[,comps[2]]),max(y2vecpos,x$scores[,comps[2]])),
+    main="PC Score Plot with 95% CI Ellipse", xlab=paste("Scores for PC",comps[1],sep=" "), ylab=paste("Scores for PC",comps[2],sep=" "),
+    xlim=c(min(y1vec,x$scores[,comps[1]]),max(y1vec,x$scores[,comps[1]])))
+  lines(y1vec,y2vecpos,col="Red",lwd=2)
+  lines(y1vec,y2vecneg,col="Red",lwd=2)
+  outliers<-((x$scores[,comps[1]]^2)/(x$sdev[comps[1]]^2)+(x$scores[,comps[2]]^2)/(x$sdev[comps[2]]^2))>5.99
+  points(x$scores[outliers,comps[1]],x$scores[outliers,comps[2]],pch=19,cex=1.2,col="Blue")
+  text(x$scores[outliers,comps[1]],x$scores[outliers,comps[2]],col="Blue",lab=namevec[outliers])
+}
+```
+
+We then create a 95% confidence ellipse plotting the first vs. second components.
+
+```{r, echo = FALSE}
+par(mfrow=c(1,1))
+ciscoreplot(drugPCA,c(1,2), toString(drugPCA$scores[,16]))
+```
+
+We also create a biplot plotting the first vs. second components.
+```{r, echo = FALSE}
+biplot(drugPCA,choices=c(1,2),pc.biplot=T, cex=.7)
+```
+
